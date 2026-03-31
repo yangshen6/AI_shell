@@ -85,7 +85,7 @@ http://你的服务器IP:3000
 
 ## Docker Compose 配置
 
-当前 [docker-compose.yml](C:\Users\mm\Documents\New project\web_trum\docker-compose.yml) 默认配置如下：
+当前 [docker-compose.yml](web_trum\docker-compose.yml) 默认配置如下：
 
 ```yml
 services:
