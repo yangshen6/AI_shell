@@ -26,6 +26,16 @@ const TEXT = {
   rejectedText: "\u672c\u6b21 AI \u547d\u4ee4\u672a\u6267\u884c\u3002",
   aiSuggestion: "AI \u547d\u4ee4\u5efa\u8bae",
   riskLabel: "\u98ce\u9669\u7b49\u7ea7",
+  statusPending: "\u5f85\u786e\u8ba4",
+  statusRunning: "\u6267\u884c\u4e2d",
+  statusExecuted: "\u5df2\u6267\u884c",
+  statusRejected: "\u5df2\u62d2\u7edd",
+  statusModified: "\u5df2\u4fee\u6539",
+  executionSummary: "\u6267\u884c\u6458\u8981",
+  executionSent: "\u547d\u4ee4\u5df2\u53d1\u9001\u5230 SSH \u7ec8\u7aef\uff0c\u6b63\u5728\u7b49\u5f85\u8fd4\u56de\u3002",
+  executionNoOutput: "\u6682\u672a\u6355\u83b7\u5230\u8be5\u6b21\u6267\u884c\u7684\u8f93\u51fa\u3002",
+  executionRejected: "\u4f60\u62d2\u7edd\u4e86\u8fd9\u6b21\u547d\u4ee4\u6267\u884c\u3002",
+  executionModified: "\u5df2\u8fdb\u5165\u4fee\u6539\u6d41\u7a0b\uff0c\u7b49\u5f85\u65b0\u7684\u8865\u5145\u8981\u6c42\u3002",
   execute: "\u6267\u884c",
   modify: "\u4fee\u6539",
   reject: "\u62d2\u7edd",
@@ -109,7 +119,10 @@ const state = {
   socket: null,
   latestAiCommand: "",
   lastAiInstruction: "",
-  messageSeq: 0
+  messageSeq: 0,
+  cardSeq: 0,
+  cardMap: new Map(),
+  activeExecution: null
 };
 
 bindEvents();
@@ -186,6 +199,7 @@ function connectSocket() {
 
     if (payload.type === "terminal-output") {
       terminal.write(payload.data.text);
+      captureExecutionOutput(payload.data.text);
       return;
     }
 
@@ -319,9 +333,21 @@ function appendSystemCard(title, text, tone) {
 }
 
 function appendAiApprovalCard(data) {
+  const cardId = `ai-card-${++state.cardSeq}`;
   const card = createConversationCard("assistant", TEXT.aiSuggestion);
+  card.dataset.cardId = cardId;
   const body = card.querySelector(".conversation-body");
   body.innerHTML = "";
+
+  const headerRow = document.createElement("div");
+  headerRow.className = "conversation-header-row";
+
+  const statusBadge = document.createElement("span");
+  statusBadge.className = "conversation-status status-pending";
+  statusBadge.textContent = TEXT.statusPending;
+  headerRow.appendChild(statusBadge);
+
+  body.appendChild(headerRow);
 
   if (data.explanation) {
     const desc = document.createElement("p");
@@ -340,6 +366,20 @@ function appendAiApprovalCard(data) {
   pre.textContent = data.command;
   body.appendChild(pre);
 
+  const summary = document.createElement("section");
+  summary.className = "conversation-summary hidden";
+
+  const summaryLabel = document.createElement("div");
+  summaryLabel.className = "conversation-summary-label";
+  summaryLabel.textContent = TEXT.executionSummary;
+
+  const summaryOutput = document.createElement("pre");
+  summaryOutput.className = "conversation-summary-output";
+
+  summary.appendChild(summaryLabel);
+  summary.appendChild(summaryOutput);
+  body.appendChild(summary);
+
   const actions = document.createElement("div");
   actions.className = "conversation-actions";
 
@@ -349,6 +389,8 @@ function appendAiApprovalCard(data) {
   executeButton.textContent = TEXT.execute;
   executeButton.addEventListener("click", () => {
     state.latestAiCommand = data.command;
+    beginExecutionCapture(cardId, data.command);
+    setCardStatus(cardId, "running");
     executeLatestAiCommand();
     appendSystemCard(TEXT.systemApproved, data.command, "success");
   });
@@ -358,6 +400,8 @@ function appendAiApprovalCard(data) {
   modifyButton.className = "secondary";
   modifyButton.textContent = TEXT.modify;
   modifyButton.addEventListener("click", () => {
+    finalizeExecutionCapture(cardId, TEXT.executionModified);
+    setCardStatus(cardId, "modified");
     refs.aiInstructionInput.value = "";
     refs.aiInstructionInput.placeholder =
       "\u7ee7\u7eed\u8865\u5145\u8981\u6c42\uff0c\u4f8b\u5982\uff1a\u53ea\u67e5\u770b\uff0c\u4e0d\u5220\u9664";
@@ -370,6 +414,8 @@ function appendAiApprovalCard(data) {
   rejectButton.className = "ghost";
   rejectButton.textContent = TEXT.reject;
   rejectButton.addEventListener("click", () => {
+    finalizeExecutionCapture(cardId, TEXT.executionRejected);
+    setCardStatus(cardId, "rejected");
     appendSystemCard(TEXT.systemRejected, TEXT.rejectedText, "muted");
     setAiHint(TEXT.hintRejected);
   });
@@ -380,6 +426,13 @@ function appendAiApprovalCard(data) {
   body.appendChild(actions);
 
   refs.aiConversation.appendChild(card);
+  state.cardMap.set(cardId, {
+    card,
+    statusBadge,
+    summary,
+    summaryOutput,
+    command: data.command
+  });
   scrollConversationToBottom();
 }
 
@@ -402,6 +455,137 @@ function createConversationCard(type, title) {
 
 function setAiHint(text) {
   refs.aiDecisionHint.textContent = text;
+}
+
+function setCardStatus(cardId, status) {
+  const entry = state.cardMap.get(cardId);
+  if (!entry) {
+    return;
+  }
+
+  const badge = entry.statusBadge;
+  badge.className = "conversation-status";
+
+  if (status === "running") {
+    badge.classList.add("status-running");
+    badge.textContent = TEXT.statusRunning;
+    return;
+  }
+
+  if (status === "executed") {
+    badge.classList.add("status-executed");
+    badge.textContent = TEXT.statusExecuted;
+    return;
+  }
+
+  if (status === "rejected") {
+    badge.classList.add("status-rejected");
+    badge.textContent = TEXT.statusRejected;
+    return;
+  }
+
+  if (status === "modified") {
+    badge.classList.add("status-modified");
+    badge.textContent = TEXT.statusModified;
+    return;
+  }
+
+  badge.classList.add("status-pending");
+  badge.textContent = TEXT.statusPending;
+}
+
+function beginExecutionCapture(cardId, command) {
+  if (state.activeExecution) {
+    finalizeExecutionCapture(state.activeExecution.cardId);
+  }
+
+  const entry = state.cardMap.get(cardId);
+  if (!entry) {
+    return;
+  }
+
+  entry.summary.classList.remove("hidden");
+  entry.summaryOutput.textContent = `${TEXT.executionSent}\n\n$ ${command}`;
+
+  state.activeExecution = {
+    cardId,
+    command,
+    chunks: [],
+    timer: null
+  };
+}
+
+function captureExecutionOutput(chunk) {
+  const active = state.activeExecution;
+  if (!active || !chunk) {
+    return;
+  }
+
+  const entry = state.cardMap.get(active.cardId);
+  if (!entry) {
+    return;
+  }
+
+  active.chunks.push(chunk);
+  if (active.chunks.length > 24) {
+    active.chunks = active.chunks.slice(-24);
+  }
+
+  const cleanedOutput = formatExecutionOutput(active.chunks.join(""));
+  entry.summary.classList.remove("hidden");
+  entry.summaryOutput.textContent = `$ ${active.command}\n${cleanedOutput || TEXT.executionNoOutput}`;
+  scrollConversationToBottom();
+
+  if (active.timer) {
+    clearTimeout(active.timer);
+  }
+
+  active.timer = window.setTimeout(() => {
+    finalizeExecutionCapture(active.cardId);
+  }, 1200);
+}
+
+function finalizeExecutionCapture(cardId, fallbackText) {
+  const active = state.activeExecution;
+  if (!active || active.cardId !== cardId) {
+    if (fallbackText) {
+      const entry = state.cardMap.get(cardId);
+      if (entry) {
+        entry.summary.classList.remove("hidden");
+        entry.summaryOutput.textContent = fallbackText;
+      }
+    }
+    return;
+  }
+
+  if (active.timer) {
+    clearTimeout(active.timer);
+  }
+
+  const entry = state.cardMap.get(cardId);
+  if (entry) {
+    const cleanedOutput = formatExecutionOutput(active.chunks.join(""));
+    entry.summary.classList.remove("hidden");
+    entry.summaryOutput.textContent = cleanedOutput
+      ? `$ ${active.command}\n${cleanedOutput}`
+      : fallbackText || `${TEXT.executionSent}\n\n$ ${active.command}\n${TEXT.executionNoOutput}`;
+  }
+
+  setCardStatus(cardId, "executed");
+  state.activeExecution = null;
+  scrollConversationToBottom();
+}
+
+function formatExecutionOutput(text) {
+  return String(text || "")
+    .replace(/\u001b\][^\u0007]*\u0007/g, "")
+    .replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "")
+    .replace(/\r/g, "")
+    .trim()
+    .split("\n")
+    .slice(-14)
+    .join("\n")
+    .slice(-1600);
 }
 
 function scrollConversationToBottom() {

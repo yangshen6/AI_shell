@@ -497,6 +497,51 @@ button:disabled {
   line-height: 1.6;
 }
 
+.conversation-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.conversation-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+
+.status-pending {
+  color: #9bc0ff;
+  background: rgba(67, 139, 255, 0.12);
+  border-color: rgba(67, 139, 255, 0.32);
+}
+
+.status-running {
+  color: #ffd36b;
+  background: rgba(255, 189, 46, 0.12);
+  border-color: rgba(255, 189, 46, 0.35);
+}
+
+.status-executed {
+  color: var(--accent-strong);
+  background: rgba(118, 228, 195, 0.1);
+  border-color: rgba(118, 228, 195, 0.28);
+}
+
+.status-rejected,
+.status-modified {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
 .conversation-text,
 .conversation-risk {
   margin: 0 0 10px;
@@ -516,14 +561,48 @@ button:disabled {
 .conversation-actions {
   display: flex;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
   flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(8, 18, 35, 0.72);
+  border: 1px solid rgba(67, 139, 255, 0.18);
 }
 
 .conversation-actions .primary,
 .conversation-actions .secondary,
 .conversation-actions .ghost {
-  padding: 10px 16px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.86rem;
+}
+
+.conversation-summary {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.conversation-summary-label {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.conversation-summary-output {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #d7e4ff;
 }
 
 #terminal {
