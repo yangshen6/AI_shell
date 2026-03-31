@@ -1,4 +1,5 @@
 const STORAGE_KEY = "ai-ssh-terminal-config";
+const SIDEBAR_KEY = "ai-ssh-terminal-sidebar-collapsed";
 
 const TEXT = {
   xtermMissing: "\u7ec8\u7aef\u4f9d\u8d56\u672a\u52a0\u8f7d",
@@ -11,6 +12,12 @@ const TEXT = {
   hintModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\u3002\u8f93\u5165\u8865\u5145\u8981\u6c42\u540e\u70b9\u51fb\u201c\u57fa\u4e8e\u5f53\u524d\u8f93\u5165\u91cd\u65b0\u601d\u8003\u201d\u3002",
   hintRejected: "\u672c\u6b21\u547d\u4ee4\u5df2\u62d2\u7edd\u3002\u4f60\u53ef\u4ee5\u7ee7\u7eed\u8f93\u5165\u65b0\u7684\u81ea\u7136\u8bed\u8a00\u9700\u6c42\u3002",
   hintShell: "\u5df2\u6309\u666e\u901a shell \u547d\u4ee4\u53d1\u9001\u5230 SSH \u4f1a\u8bdd\u3002",
+  inlineAiHeader: "\u667a\u80fd\u52a9\u624b",
+  inlineCommandLabel: "\u5efa\u8bae\u547d\u4ee4",
+  inlineApproveHint: "\u6309 Ctrl+Y \u6267\u884c\uff0cCtrl+E \u4fee\u6539\uff0cCtrl+X \u62d2\u7edd\u3002",
+  inlineRejected: "\u5df2\u62d2\u7edd\u672c\u6b21 AI \u547d\u4ee4\u3002",
+  inlineModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\uff0c\u8bf7\u5728\u4e0b\u65b9\u547d\u4ee4\u680f\u8f93\u5165\u8865\u5145\u8981\u6c42\u3002",
+  inlineExecuting: "\u6b63\u5728\u6267\u884c AI \u547d\u4ee4...",
   webSocketConnected: "WebSocket connected.",
   webSocketDisconnected: "WebSocket disconnected.",
   noAiCommand: "No AI-generated command available.",
@@ -106,10 +113,12 @@ const refs = {
   connectButton: document.querySelector("#connectButton"),
   disconnectButton: document.querySelector("#disconnectButton"),
   runAiButton: document.querySelector("#runAiButton"),
+  toggleSidebarButton: document.querySelector("#toggleSidebarButton"),
   runSuggestedButton: document.querySelector("#runSuggestedButton"),
   connectionStatus: document.querySelector("#connectionStatus"),
   aiPreview: document.querySelector("#aiPreview"),
   keyAuthFields: document.querySelector("#keyAuthFields"),
+  assistantStreamShell: document.querySelector("#assistantStreamShell"),
   aiDecisionHint: document.querySelector("#aiDecisionHint"),
   aiConversation: document.querySelector("#aiConversation"),
   commandInput: document.querySelector("#commandInput"),
@@ -124,11 +133,13 @@ const state = {
   cardSeq: 0,
   cardMap: new Map(),
   activeExecution: null,
-  inputMode: "smart"
+  inputMode: "smart",
+  pendingInlineDecision: false
 };
 
 bindEvents();
 loadConfig();
+restoreSidebarState();
 connectSocket();
 renderAuthMode();
 observeTerminalResize();
@@ -139,6 +150,7 @@ function bindEvents() {
   refs.connectButton.addEventListener("click", connectSsh);
   refs.disconnectButton.addEventListener("click", disconnectSsh);
   refs.runAiButton.addEventListener("click", () => refs.commandInput.focus());
+  refs.toggleSidebarButton.addEventListener("click", toggleSidebar);
   refs.runSuggestedButton.addEventListener("click", executeLatestAiCommand);
   refs.commandSubmitButton.addEventListener("click", submitCommandBar);
   refs.authMode.addEventListener("change", () => {
@@ -183,6 +195,29 @@ function bindEvents() {
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "k") {
       event.preventDefault();
       refs.commandInput.focus();
+      return;
+    }
+
+    if (!state.pendingInlineDecision || !event.ctrlKey) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (key === "y") {
+      event.preventDefault();
+      approveInlineCommand();
+      return;
+    }
+
+    if (key === "e") {
+      event.preventDefault();
+      modifyInlineCommand();
+      return;
+    }
+
+    if (key === "x") {
+      event.preventDefault();
+      rejectInlineCommand();
     }
   });
 }
@@ -238,14 +273,10 @@ function connectSocket() {
 
 function handleAiCommandResponse(data) {
   state.latestAiCommand = data.command;
+  state.pendingInlineDecision = true;
   refs.aiPreview.textContent = `AI: ${data.command} | risk: ${data.risk}`;
   setAiHint(TEXT.hintReady);
-  appendAiApprovalCard(data);
-
-  terminal.writeln(`\r\n[ai] command: ${data.command}`);
-  if (data.explanation) {
-    terminal.writeln(`[ai] note: ${data.explanation}`);
-  }
+  printInlineAiDecision(data);
 }
 
 function connectSsh() {
@@ -297,6 +328,7 @@ function submitInitialInstruction(instruction) {
     return;
   }
 
+  terminal.writeln(`\r\n${instruction}`);
   requestAiCommand(instruction, "user");
 }
 
@@ -306,6 +338,7 @@ function submitRefinementFromInput(extraInstruction) {
     return;
   }
 
+  terminal.writeln(`\r\n${extraInstruction}`);
   requestAiCommand(composeRefinementInstruction(extraInstruction), "refine", extraInstruction);
 }
 
@@ -320,7 +353,6 @@ function submitShellCommand(command) {
 
 function requestAiCommand(instruction, mode, displayText) {
   state.lastAiInstruction = instruction;
-  appendUserCard(displayText || instruction, mode);
   refs.commandInput.value = "";
   autoResizeCommandInput();
   state.inputMode = "smart";
@@ -339,6 +371,7 @@ function executeLatestAiCommand() {
     return;
   }
 
+  state.pendingInlineDecision = false;
   send("execute-ai-command", {});
 }
 
@@ -351,123 +384,16 @@ function composeRefinementInstruction(extraInstruction) {
 }
 
 function appendUserCard(text, mode) {
-  const title = mode === "refine" ? TEXT.userRefine : TEXT.userRequest;
-  const card = createConversationCard("user", title);
-  card.querySelector(".conversation-body").textContent = text;
-  refs.aiConversation.appendChild(card);
-  scrollConversationToBottom();
+  return;
 }
 
 function appendSystemCard(title, text, tone) {
-  const card = createConversationCard(`system ${tone || ""}`.trim(), title);
-  card.querySelector(".conversation-body").textContent = text;
-  refs.aiConversation.appendChild(card);
-  scrollConversationToBottom();
+  terminal.writeln(`\r\n[${title}] ${text}`);
+  return;
 }
 
 function appendAiApprovalCard(data) {
-  const cardId = `ai-card-${++state.cardSeq}`;
-  const card = createConversationCard("assistant", TEXT.aiSuggestion);
-  card.dataset.cardId = cardId;
-  const body = card.querySelector(".conversation-body");
-  body.innerHTML = "";
-
-  const headerRow = document.createElement("div");
-  headerRow.className = "conversation-header-row";
-
-  const statusBadge = document.createElement("span");
-  statusBadge.className = "conversation-status status-pending";
-  statusBadge.textContent = TEXT.statusPending;
-  headerRow.appendChild(statusBadge);
-
-  body.appendChild(headerRow);
-
-  if (data.explanation) {
-    const desc = document.createElement("p");
-    desc.className = "conversation-text";
-    desc.textContent = data.explanation;
-    body.appendChild(desc);
-  }
-
-  const risk = document.createElement("p");
-  risk.className = "conversation-risk";
-  risk.textContent = `${TEXT.riskLabel}: ${data.risk || "unknown"}`;
-  body.appendChild(risk);
-
-  const pre = document.createElement("pre");
-  pre.className = "conversation-command";
-  pre.textContent = data.command;
-  body.appendChild(pre);
-
-  const summary = document.createElement("section");
-  summary.className = "conversation-summary hidden";
-
-  const summaryLabel = document.createElement("div");
-  summaryLabel.className = "conversation-summary-label";
-  summaryLabel.textContent = TEXT.executionSummary;
-
-  const summaryOutput = document.createElement("pre");
-  summaryOutput.className = "conversation-summary-output";
-
-  summary.appendChild(summaryLabel);
-  summary.appendChild(summaryOutput);
-  body.appendChild(summary);
-
-  const actions = document.createElement("div");
-  actions.className = "conversation-actions";
-
-  const executeButton = document.createElement("button");
-  executeButton.type = "button";
-  executeButton.className = "primary";
-  executeButton.textContent = TEXT.execute;
-  executeButton.addEventListener("click", () => {
-    state.latestAiCommand = data.command;
-    beginExecutionCapture(cardId, data.command);
-    setCardStatus(cardId, "running");
-    executeLatestAiCommand();
-    appendSystemCard(TEXT.systemApproved, data.command, "success");
-  });
-
-  const modifyButton = document.createElement("button");
-  modifyButton.type = "button";
-  modifyButton.className = "secondary";
-  modifyButton.textContent = TEXT.modify;
-  modifyButton.addEventListener("click", () => {
-    finalizeExecutionCapture(cardId, TEXT.executionModified);
-    setCardStatus(cardId, "modified");
-    state.inputMode = "refine";
-    refs.commandInput.value = "";
-    refs.commandInput.placeholder = TEXT.refinePlaceholder;
-    autoResizeCommandInput();
-    refs.commandInput.focus();
-    setAiHint(TEXT.hintModify);
-  });
-
-  const rejectButton = document.createElement("button");
-  rejectButton.type = "button";
-  rejectButton.className = "ghost";
-  rejectButton.textContent = TEXT.reject;
-  rejectButton.addEventListener("click", () => {
-    finalizeExecutionCapture(cardId, TEXT.executionRejected);
-    setCardStatus(cardId, "rejected");
-    appendSystemCard(TEXT.systemRejected, TEXT.rejectedText, "muted");
-    setAiHint(TEXT.hintRejected);
-  });
-
-  actions.appendChild(executeButton);
-  actions.appendChild(modifyButton);
-  actions.appendChild(rejectButton);
-  body.appendChild(actions);
-
-  refs.aiConversation.appendChild(card);
-  state.cardMap.set(cardId, {
-    card,
-    statusBadge,
-    summary,
-    summaryOutput,
-    command: data.command
-  });
-  scrollConversationToBottom();
+  return;
 }
 
 function createConversationCard(type, title) {
@@ -626,6 +552,10 @@ function scrollConversationToBottom() {
   refs.aiConversation.scrollTop = refs.aiConversation.scrollHeight;
 }
 
+function showAssistantStream() {
+  return;
+}
+
 function looksLikeNaturalLanguage(text) {
   const value = String(text || "").trim();
   if (!value) {
@@ -650,6 +580,64 @@ function looksLikeNaturalLanguage(text) {
 function autoResizeCommandInput() {
   refs.commandInput.style.height = "auto";
   refs.commandInput.style.height = `${Math.min(refs.commandInput.scrollHeight, 160)}px`;
+}
+
+function printInlineAiDecision(data) {
+  terminal.writeln("");
+  terminal.writeln(`[${TEXT.inlineAiHeader}] ${data.explanation || ""}`);
+  terminal.writeln(`[${TEXT.riskLabel}] ${data.risk || "unknown"}`);
+  terminal.writeln(`[${TEXT.inlineCommandLabel}] ${data.command}`);
+  terminal.writeln(`[hint] ${TEXT.inlineApproveHint}`);
+  terminal.writeln("");
+}
+
+function approveInlineCommand() {
+  if (!state.pendingInlineDecision) {
+    return;
+  }
+
+  terminal.writeln(`\r\n[status] ${TEXT.inlineExecuting}`);
+  executeLatestAiCommand();
+}
+
+function modifyInlineCommand() {
+  if (!state.pendingInlineDecision) {
+    return;
+  }
+
+  state.pendingInlineDecision = false;
+  state.inputMode = "refine";
+  refs.commandInput.value = "";
+  refs.commandInput.placeholder = TEXT.refinePlaceholder;
+  autoResizeCommandInput();
+  refs.commandInput.focus();
+  setAiHint(TEXT.hintModify);
+  terminal.writeln(`\r\n[status] ${TEXT.inlineModify}`);
+}
+
+function rejectInlineCommand() {
+  if (!state.pendingInlineDecision) {
+    return;
+  }
+
+  state.pendingInlineDecision = false;
+  setAiHint(TEXT.hintRejected);
+  terminal.writeln(`\r\n[status] ${TEXT.inlineRejected}`);
+}
+
+function restoreSidebarState() {
+  const collapsed = localStorage.getItem(SIDEBAR_KEY) !== "expanded";
+  document.body.classList.toggle("sidebar-collapsed", collapsed);
+}
+
+function toggleSidebar() {
+  const collapsed = !document.body.classList.contains("sidebar-collapsed");
+  document.body.classList.toggle("sidebar-collapsed", collapsed);
+  localStorage.setItem(SIDEBAR_KEY, collapsed ? "collapsed" : "expanded");
+  window.setTimeout(() => {
+    fitAddon.fit();
+    syncTerminalSize();
+  }, 220);
 }
 
 function renderAuthMode() {
