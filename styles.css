@@ -441,12 +441,27 @@ button:disabled {
   justify-content: flex-start;
 }
 
+.assistant-stream-shell {
+  margin: 14px 20px 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.assistant-stream-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .ai-conversation {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 16px;
-  max-height: 420px;
+  margin-top: 14px;
+  max-height: 280px;
   overflow: auto;
   padding-right: 4px;
 }
@@ -607,12 +622,62 @@ button:disabled {
 
 #terminal {
   flex: 1;
-  margin: 18px 20px 20px;
+  margin: 14px 20px 0;
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  min-height: 420px;
+  min-height: 320px;
   background: rgba(2, 8, 18, 0.92);
+}
+
+.command-bar {
+  padding: 14px 20px 20px;
+}
+
+.command-bar-label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.command-input-shell {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(2, 10, 20, 0.82);
+  border: 1px solid rgba(118, 228, 195, 0.16);
+}
+
+.command-prompt {
+  padding: 10px 0 12px;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1rem;
+}
+
+#commandInput {
+  min-height: 48px;
+  max-height: 160px;
+  resize: none;
+  border: none;
+  background: transparent;
+  padding: 10px 0 8px;
+}
+
+#commandInput:focus {
+  transform: none;
+  background: transparent;
+}
+
+#commandSubmitButton {
+  min-width: 88px;
 }
 
 select {
@@ -662,7 +727,9 @@ select {
   .input-actions,
   .terminal-toolbar,
   .decision-layout,
-  .decision-header {
+  .decision-header,
+  .assistant-stream-header,
+  .command-input-shell {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: stretch;

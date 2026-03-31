@@ -4,12 +4,13 @@ const TEXT = {
   xtermMissing: "\u7ec8\u7aef\u4f9d\u8d56\u672a\u52a0\u8f7d",
   terminalReady: "AI SSH Terminal ready.",
   terminalForwarding: "All keys are forwarded to the SSH PTY.",
-  terminalHint: "Use the AI conversation stream to generate and approve shell commands.",
-  hintDefault: "\u63d0\u95ee\u3001AI \u89e3\u91ca\u3001\u547d\u4ee4\u5ba1\u6279\u548c\u8865\u5145\u8981\u6c42\u4f1a\u6301\u7eed\u8ffd\u52a0\u5230\u8fd9\u91cc\u3002",
+  terminalHint: "Use the unified command bar for shell commands or natural-language requests.",
+  hintDefault: "\u76f4\u63a5\u5728\u547d\u4ee4\u680f\u8f93\u5165 shell \u547d\u4ee4\u6216\u81ea\u7136\u8bed\u8a00\uff0cAI \u4f1a\u628a\u5206\u6790\u4e0e\u5ba1\u6279\u7ed3\u679c\u8ffd\u52a0\u5230\u4e3b\u4f1a\u8bdd\u533a\u57df\u3002",
   hintLoading: "AI \u6b63\u5728\u601d\u8003\uff0c\u8bf7\u7a0d\u5019\u3002",
   hintReady: "AI \u5df2\u7ed9\u51fa\u547d\u4ee4\u65b9\u6848\u3002\u4f60\u53ef\u4ee5\u76f4\u63a5\u6267\u884c\u3001\u4fee\u6539\u540e\u91cd\u8bd5\uff0c\u6216\u8005\u62d2\u7edd\u3002",
   hintModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\u3002\u8f93\u5165\u8865\u5145\u8981\u6c42\u540e\u70b9\u51fb\u201c\u57fa\u4e8e\u5f53\u524d\u8f93\u5165\u91cd\u65b0\u601d\u8003\u201d\u3002",
   hintRejected: "\u672c\u6b21\u547d\u4ee4\u5df2\u62d2\u7edd\u3002\u4f60\u53ef\u4ee5\u7ee7\u7eed\u8f93\u5165\u65b0\u7684\u81ea\u7136\u8bed\u8a00\u9700\u6c42\u3002",
+  hintShell: "\u5df2\u6309\u666e\u901a shell \u547d\u4ee4\u53d1\u9001\u5230 SSH \u4f1a\u8bdd\u3002",
   webSocketConnected: "WebSocket connected.",
   webSocketDisconnected: "WebSocket disconnected.",
   noAiCommand: "No AI-generated command available.",
@@ -36,6 +37,8 @@ const TEXT = {
   executionNoOutput: "\u6682\u672a\u6355\u83b7\u5230\u8be5\u6b21\u6267\u884c\u7684\u8f93\u51fa\u3002",
   executionRejected: "\u4f60\u62d2\u7edd\u4e86\u8fd9\u6b21\u547d\u4ee4\u6267\u884c\u3002",
   executionModified: "\u5df2\u8fdb\u5165\u4fee\u6539\u6d41\u7a0b\uff0c\u7b49\u5f85\u65b0\u7684\u8865\u5145\u8981\u6c42\u3002",
+  commandPlaceholder: "\u76f4\u63a5\u8f93\u5165 shell \u547d\u4ee4\u6216\u81ea\u7136\u8bed\u8a00\uff0c\u4f8b\u5982\uff1a\u67e5\u770b\u5185\u5b58\u4f7f\u7528\u7387",
+  refinePlaceholder: "\u7ee7\u7eed\u8865\u5145\u8981\u6c42\uff0c\u4f8b\u5982\uff1a\u53ea\u67e5\u770b\uff0c\u4e0d\u5220\u9664",
   execute: "\u6267\u884c",
   modify: "\u4fee\u6539",
   reject: "\u62d2\u7edd",
@@ -107,12 +110,10 @@ const refs = {
   connectionStatus: document.querySelector("#connectionStatus"),
   aiPreview: document.querySelector("#aiPreview"),
   keyAuthFields: document.querySelector("#keyAuthFields"),
-  aiWorkflowPanel: document.querySelector("#aiWorkflowPanel"),
-  aiInstructionInput: document.querySelector("#aiInstructionInput"),
-  aiGenerateButton: document.querySelector("#aiGenerateButton"),
-  aiRefineButton: document.querySelector("#aiRefineButton"),
   aiDecisionHint: document.querySelector("#aiDecisionHint"),
-  aiConversation: document.querySelector("#aiConversation")
+  aiConversation: document.querySelector("#aiConversation"),
+  commandInput: document.querySelector("#commandInput"),
+  commandSubmitButton: document.querySelector("#commandSubmitButton")
 };
 
 const state = {
@@ -122,7 +123,8 @@ const state = {
   messageSeq: 0,
   cardSeq: 0,
   cardMap: new Map(),
-  activeExecution: null
+  activeExecution: null,
+  inputMode: "smart"
 };
 
 bindEvents();
@@ -131,14 +133,14 @@ connectSocket();
 renderAuthMode();
 observeTerminalResize();
 setAiHint(TEXT.hintDefault);
+autoResizeCommandInput();
 
 function bindEvents() {
   refs.connectButton.addEventListener("click", connectSsh);
   refs.disconnectButton.addEventListener("click", disconnectSsh);
-  refs.runAiButton.addEventListener("click", () => refs.aiInstructionInput.focus());
+  refs.runAiButton.addEventListener("click", () => refs.commandInput.focus());
   refs.runSuggestedButton.addEventListener("click", executeLatestAiCommand);
-  refs.aiGenerateButton.addEventListener("click", submitInitialInstruction);
-  refs.aiRefineButton.addEventListener("click", submitRefinementFromInput);
+  refs.commandSubmitButton.addEventListener("click", submitCommandBar);
   refs.authMode.addEventListener("change", () => {
     renderAuthMode();
     saveConfig();
@@ -161,12 +163,13 @@ function bindEvents() {
     refs[key].addEventListener("input", saveConfig);
   }
 
-  refs.aiInstructionInput.addEventListener("keydown", (event) => {
+  refs.commandInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      submitInitialInstruction();
+      submitCommandBar();
     }
   });
+  refs.commandInput.addEventListener("input", autoResizeCommandInput);
 
   terminal.onData((data) => {
     send("terminal-input", { text: data });
@@ -179,7 +182,7 @@ function bindEvents() {
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      refs.aiInstructionInput.focus();
+      refs.commandInput.focus();
     }
   });
 }
@@ -268,30 +271,60 @@ function disconnectSsh() {
   send("disconnect-ssh", {});
 }
 
-function submitInitialInstruction() {
-  const instruction = refs.aiInstructionInput.value.trim();
+function submitCommandBar() {
+  const text = refs.commandInput.value.trim();
+  if (!text) {
+    refs.commandInput.focus();
+    return;
+  }
+
+  if (state.inputMode === "refine") {
+    submitRefinementFromInput(text);
+    return;
+  }
+
+  if (looksLikeNaturalLanguage(text)) {
+    submitInitialInstruction(text);
+    return;
+  }
+
+  submitShellCommand(text);
+}
+
+function submitInitialInstruction(instruction) {
   if (!instruction) {
-    refs.aiInstructionInput.focus();
+    refs.commandInput.focus();
     return;
   }
 
   requestAiCommand(instruction, "user");
 }
 
-function submitRefinementFromInput() {
-  const extraInstruction = refs.aiInstructionInput.value.trim();
+function submitRefinementFromInput(extraInstruction) {
   if (!extraInstruction) {
-    refs.aiInstructionInput.focus();
+    refs.commandInput.focus();
     return;
   }
 
   requestAiCommand(composeRefinementInstruction(extraInstruction), "refine", extraInstruction);
 }
 
+function submitShellCommand(command) {
+  refs.commandInput.value = "";
+  autoResizeCommandInput();
+  state.inputMode = "smart";
+  refs.commandInput.placeholder = TEXT.commandPlaceholder;
+  setAiHint(TEXT.hintShell);
+  send("terminal-input", { text: `${command}\r` });
+}
+
 function requestAiCommand(instruction, mode, displayText) {
   state.lastAiInstruction = instruction;
   appendUserCard(displayText || instruction, mode);
-  refs.aiInstructionInput.value = "";
+  refs.commandInput.value = "";
+  autoResizeCommandInput();
+  state.inputMode = "smart";
+  refs.commandInput.placeholder = TEXT.commandPlaceholder;
   setAiHint(TEXT.hintLoading);
   send("request-ai-command", {
     instruction,
@@ -402,10 +435,11 @@ function appendAiApprovalCard(data) {
   modifyButton.addEventListener("click", () => {
     finalizeExecutionCapture(cardId, TEXT.executionModified);
     setCardStatus(cardId, "modified");
-    refs.aiInstructionInput.value = "";
-    refs.aiInstructionInput.placeholder =
-      "\u7ee7\u7eed\u8865\u5145\u8981\u6c42\uff0c\u4f8b\u5982\uff1a\u53ea\u67e5\u770b\uff0c\u4e0d\u5220\u9664";
-    refs.aiInstructionInput.focus();
+    state.inputMode = "refine";
+    refs.commandInput.value = "";
+    refs.commandInput.placeholder = TEXT.refinePlaceholder;
+    autoResizeCommandInput();
+    refs.commandInput.focus();
     setAiHint(TEXT.hintModify);
   });
 
@@ -590,6 +624,32 @@ function formatExecutionOutput(text) {
 
 function scrollConversationToBottom() {
   refs.aiConversation.scrollTop = refs.aiConversation.scrollHeight;
+}
+
+function looksLikeNaturalLanguage(text) {
+  const value = String(text || "").trim();
+  if (!value) {
+    return false;
+  }
+
+  if (/[\u4e00-\u9fff]/.test(value)) {
+    return true;
+  }
+
+  if (/^(\/|\.\/|~\/|[A-Za-z0-9_.-]+=|sudo\s+|ssh\s+|cd\s+|ls\b|pwd\b|cat\b|grep\b|find\b|ps\b|top\b|free\b|df\b|du\b|docker\b|podman\b|kubectl\b|systemctl\b|journalctl\b|tail\b|head\b|chmod\b|chown\b|mkdir\b|rm\b|cp\b|mv\b|tar\b|curl\b|wget\b|git\b|npm\b|pnpm\b|yarn\b|python\b|node\b)/.test(value)) {
+    return false;
+  }
+
+  if (/[|&;<>(){}\[\]$`]/.test(value)) {
+    return false;
+  }
+
+  return /\s/.test(value) || value.split(/\s+/).length > 1;
+}
+
+function autoResizeCommandInput() {
+  refs.commandInput.style.height = "auto";
+  refs.commandInput.style.height = `${Math.min(refs.commandInput.scrollHeight, 160)}px`;
 }
 
 function renderAuthMode() {
