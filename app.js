@@ -134,7 +134,8 @@ const state = {
   pendingInlineDecision: false,
   localInputBuffer: "",
   pendingShellEcho: "",
-  lastPrompt: "$ "
+  lastPrompt: "$ ",
+  lineMode: null
 };
 
 bindEvents();
@@ -297,6 +298,7 @@ function disconnectSsh() {
 function handleTerminalData(data) {
   if (data === "\u0003") {
     state.localInputBuffer = "";
+    state.lineMode = null;
     send("terminal-input", { text: data });
     return;
   }
@@ -306,9 +308,26 @@ function handleTerminalData(data) {
     return;
   }
 
+  if (data === "\t") {
+    if (state.lineMode === "remote") {
+      send("terminal-input", { text: data });
+      return;
+    }
+
+    if (!state.localInputBuffer) {
+      send("terminal-input", { text: data });
+      return;
+    }
+  }
+
   if (data === "\u007f") {
+    if (state.lineMode === "remote") {
+      send("terminal-input", { text: data });
+      return;
+    }
+
     if (state.localInputBuffer) {
-      state.localInputBuffer = state.localInputBuffer.slice(0, -1);
+      state.localInputBuffer = deleteLastGlyph(state.localInputBuffer);
       terminal.write("\b \b");
     } else {
       send("terminal-input", { text: data });
@@ -317,10 +336,23 @@ function handleTerminalData(data) {
   }
 
   if (data.startsWith("\u001b")) {
-    if (!state.localInputBuffer) {
+    if (state.lineMode === "remote" || !state.localInputBuffer) {
       send("terminal-input", { text: data });
     }
     return;
+  }
+
+  if (state.lineMode === "remote") {
+    send("terminal-input", { text: data });
+    return;
+  }
+
+  if (!state.lineMode) {
+    state.lineMode = shouldUseLocalAIMode(data) || state.inputMode === "refine" ? "local" : "remote";
+    if (state.lineMode === "remote") {
+      send("terminal-input", { text: data });
+      return;
+    }
   }
 
   state.localInputBuffer += data;
@@ -328,12 +360,24 @@ function handleTerminalData(data) {
 }
 
 function commitTerminalLine() {
+  if (state.pendingInlineDecision && !state.localInputBuffer && !state.lineMode) {
+    approveInlineCommand();
+    return;
+  }
+
+  if (state.lineMode === "remote") {
+    send("terminal-input", { text: "\r" });
+    state.lineMode = null;
+    return;
+  }
+
   const text = state.localInputBuffer.trim();
   terminal.write("\r\n");
   state.localInputBuffer = "";
+  state.lineMode = null;
 
   if (!text) {
-    send("terminal-input", { text: "\r" });
+    replayPrompt();
     return;
   }
 
@@ -355,6 +399,7 @@ function submitInitialInstruction(instruction) {
     return;
   }
 
+  state.pendingInlineDecision = false;
   requestAiCommand(instruction, "user");
 }
 
@@ -363,12 +408,14 @@ function submitRefinementFromInput(extraInstruction) {
     return;
   }
 
+  state.pendingInlineDecision = false;
   requestAiCommand(composeRefinementInstruction(extraInstruction), "refine", extraInstruction);
 }
 
 function submitShellCommand(command) {
   state.inputMode = "smart";
   state.pendingShellEcho = command;
+  state.pendingInlineDecision = false;
   setAiHint(TEXT.hintShell);
   send("terminal-input", { text: `${command}\r` });
 }
@@ -598,6 +645,17 @@ function looksLikeNaturalLanguage(text) {
 
 function autoResizeCommandInput() {
   return;
+}
+
+function shouldUseLocalAIMode(firstChunk) {
+  const value = String(firstChunk || "");
+  return /[\u4e00-\u9fff]/.test(value);
+}
+
+function deleteLastGlyph(value) {
+  const glyphs = Array.from(String(value || ""));
+  glyphs.pop();
+  return glyphs.join("");
 }
 
 function printInlineAiDecision(data) {
