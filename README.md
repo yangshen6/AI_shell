@@ -28,12 +28,12 @@
 
 ## 目录说明
 
-- [server.js](C:\Users\mm\Documents\New project\web_trum\server.js)
-- [app.js](C:\Users\mm\Documents\New project\web_trum\app.js)
-- [index.html](C:\Users\mm\Documents\New project\web_trum\index.html)
-- [styles.css](C:\Users\mm\Documents\New project\web_trum\styles.css)
-- [Dockerfile](C:\Users\mm\Documents\New project\web_trum\Dockerfile)
-- [docker-compose.yml](C:\Users\mm\Documents\New project\web_trum\docker-compose.yml)
+- [server.js](web_trum\server.js)
+- [app.js](web_trum\app.js)
+- [index.html](web_trum\index.html)
+- [styles.css](web_trum\styles.css)
+- [Dockerfile](web_trum\Dockerfile)
+- [docker-compose.yml](web_trum\docker-compose.yml)
 
 ## 环境要求
 
