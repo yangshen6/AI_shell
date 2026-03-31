@@ -5,8 +5,8 @@ const TEXT = {
   xtermMissing: "\u7ec8\u7aef\u4f9d\u8d56\u672a\u52a0\u8f7d",
   terminalReady: "AI SSH Terminal ready.",
   terminalForwarding: "All keys are forwarded to the SSH PTY.",
-  terminalHint: "Use the unified command bar for shell commands or natural-language requests.",
-  hintDefault: "\u76f4\u63a5\u5728\u547d\u4ee4\u680f\u8f93\u5165 shell \u547d\u4ee4\u6216\u81ea\u7136\u8bed\u8a00\uff0cAI \u4f1a\u628a\u5206\u6790\u4e0e\u5ba1\u6279\u7ed3\u679c\u8ffd\u52a0\u5230\u4e3b\u4f1a\u8bdd\u533a\u57df\u3002",
+  terminalHint: "Type directly in the terminal. Enter decides whether the line goes to SSH or AI.",
+  hintDefault: "\u76f4\u63a5\u5728 xterm \u5f53\u524d prompt \u8f93\u5165\u3002\u56de\u8f66\u540e\u4f1a\u5224\u65ad\u662f shell \u547d\u4ee4\u8fd8\u662f\u81ea\u7136\u8bed\u8a00\u3002",
   hintLoading: "AI \u6b63\u5728\u601d\u8003\uff0c\u8bf7\u7a0d\u5019\u3002",
   hintReady: "AI \u5df2\u7ed9\u51fa\u547d\u4ee4\u65b9\u6848\u3002\u4f60\u53ef\u4ee5\u76f4\u63a5\u6267\u884c\u3001\u4fee\u6539\u540e\u91cd\u8bd5\uff0c\u6216\u8005\u62d2\u7edd\u3002",
   hintModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\u3002\u8f93\u5165\u8865\u5145\u8981\u6c42\u540e\u70b9\u51fb\u201c\u57fa\u4e8e\u5f53\u524d\u8f93\u5165\u91cd\u65b0\u601d\u8003\u201d\u3002",
@@ -16,8 +16,9 @@ const TEXT = {
   inlineCommandLabel: "\u5efa\u8bae\u547d\u4ee4",
   inlineApproveHint: "\u6309 Ctrl+Y \u6267\u884c\uff0cCtrl+E \u4fee\u6539\uff0cCtrl+X \u62d2\u7edd\u3002",
   inlineRejected: "\u5df2\u62d2\u7edd\u672c\u6b21 AI \u547d\u4ee4\u3002",
-  inlineModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\uff0c\u8bf7\u5728\u4e0b\u65b9\u547d\u4ee4\u680f\u8f93\u5165\u8865\u5145\u8981\u6c42\u3002",
+  inlineModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\uff0c\u8bf7\u76f4\u63a5\u5728\u7ec8\u7aef prompt \u8f93\u5165\u8865\u5145\u8981\u6c42\u3002",
   inlineExecuting: "\u6b63\u5728\u6267\u884c AI \u547d\u4ee4...",
+  localInputHint: "\u7ec8\u7aef\u76f4\u63a5\u63a5\u7ba1\u8f93\u5165\u4e2d\u3002",
   webSocketConnected: "WebSocket connected.",
   webSocketDisconnected: "WebSocket disconnected.",
   noAiCommand: "No AI-generated command available.",
@@ -44,8 +45,6 @@ const TEXT = {
   executionNoOutput: "\u6682\u672a\u6355\u83b7\u5230\u8be5\u6b21\u6267\u884c\u7684\u8f93\u51fa\u3002",
   executionRejected: "\u4f60\u62d2\u7edd\u4e86\u8fd9\u6b21\u547d\u4ee4\u6267\u884c\u3002",
   executionModified: "\u5df2\u8fdb\u5165\u4fee\u6539\u6d41\u7a0b\uff0c\u7b49\u5f85\u65b0\u7684\u8865\u5145\u8981\u6c42\u3002",
-  commandPlaceholder: "\u76f4\u63a5\u8f93\u5165 shell \u547d\u4ee4\u6216\u81ea\u7136\u8bed\u8a00\uff0c\u4f8b\u5982\uff1a\u67e5\u770b\u5185\u5b58\u4f7f\u7528\u7387",
-  refinePlaceholder: "\u7ee7\u7eed\u8865\u5145\u8981\u6c42\uff0c\u4f8b\u5982\uff1a\u53ea\u67e5\u770b\uff0c\u4e0d\u5220\u9664",
   execute: "\u6267\u884c",
   modify: "\u4fee\u6539",
   reject: "\u62d2\u7edd",
@@ -120,9 +119,7 @@ const refs = {
   keyAuthFields: document.querySelector("#keyAuthFields"),
   assistantStreamShell: document.querySelector("#assistantStreamShell"),
   aiDecisionHint: document.querySelector("#aiDecisionHint"),
-  aiConversation: document.querySelector("#aiConversation"),
-  commandInput: document.querySelector("#commandInput"),
-  commandSubmitButton: document.querySelector("#commandSubmitButton")
+  aiConversation: document.querySelector("#aiConversation")
 };
 
 const state = {
@@ -134,7 +131,10 @@ const state = {
   cardMap: new Map(),
   activeExecution: null,
   inputMode: "smart",
-  pendingInlineDecision: false
+  pendingInlineDecision: false,
+  localInputBuffer: "",
+  pendingShellEcho: "",
+  lastPrompt: "$ "
 };
 
 bindEvents();
@@ -144,15 +144,13 @@ connectSocket();
 renderAuthMode();
 observeTerminalResize();
 setAiHint(TEXT.hintDefault);
-autoResizeCommandInput();
 
 function bindEvents() {
   refs.connectButton.addEventListener("click", connectSsh);
   refs.disconnectButton.addEventListener("click", disconnectSsh);
-  refs.runAiButton.addEventListener("click", () => refs.commandInput.focus());
+  refs.runAiButton.addEventListener("click", () => terminal.focus());
   refs.toggleSidebarButton.addEventListener("click", toggleSidebar);
   refs.runSuggestedButton.addEventListener("click", executeLatestAiCommand);
-  refs.commandSubmitButton.addEventListener("click", submitCommandBar);
   refs.authMode.addEventListener("change", () => {
     renderAuthMode();
     saveConfig();
@@ -175,17 +173,7 @@ function bindEvents() {
     refs[key].addEventListener("input", saveConfig);
   }
 
-  refs.commandInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      submitCommandBar();
-    }
-  });
-  refs.commandInput.addEventListener("input", autoResizeCommandInput);
-
-  terminal.onData((data) => {
-    send("terminal-input", { text: data });
-  });
+  terminal.onData(handleTerminalData);
 
   terminalElement.addEventListener("click", () => {
     terminal.focus();
@@ -194,7 +182,7 @@ function bindEvents() {
   window.addEventListener("keydown", (event) => {
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      refs.commandInput.focus();
+      terminal.focus();
       return;
     }
 
@@ -236,8 +224,12 @@ function connectSocket() {
     const payload = JSON.parse(event.data);
 
     if (payload.type === "terminal-output") {
-      terminal.write(payload.data.text);
-      captureExecutionOutput(payload.data.text);
+      const filtered = filterShellEcho(payload.data.text);
+      updateLastPrompt(filtered);
+      if (filtered) {
+        terminal.write(filtered);
+        captureExecutionOutput(filtered);
+      }
       return;
     }
 
@@ -302,10 +294,46 @@ function disconnectSsh() {
   send("disconnect-ssh", {});
 }
 
-function submitCommandBar() {
-  const text = refs.commandInput.value.trim();
+function handleTerminalData(data) {
+  if (data === "\u0003") {
+    state.localInputBuffer = "";
+    send("terminal-input", { text: data });
+    return;
+  }
+
+  if (data === "\r") {
+    commitTerminalLine();
+    return;
+  }
+
+  if (data === "\u007f") {
+    if (state.localInputBuffer) {
+      state.localInputBuffer = state.localInputBuffer.slice(0, -1);
+      terminal.write("\b \b");
+    } else {
+      send("terminal-input", { text: data });
+    }
+    return;
+  }
+
+  if (data.startsWith("\u001b")) {
+    if (!state.localInputBuffer) {
+      send("terminal-input", { text: data });
+    }
+    return;
+  }
+
+  state.localInputBuffer += data;
+  terminal.write(data);
+}
+
+function commitTerminalLine() {
+  const text = state.localInputBuffer.trim();
+  terminal.write("\r\n");
+  state.localInputBuffer = "";
+
   if (!text) {
-    refs.commandInput.focus();
+    send("terminal-input", { text: "\r" });
     return;
   }
 
@@ -324,39 +352,30 @@ function submitCommandBar() {
 
 function submitInitialInstruction(instruction) {
   if (!instruction) {
-    refs.commandInput.focus();
     return;
   }
 
-  terminal.writeln(`\r\n${instruction}`);
   requestAiCommand(instruction, "user");
 }
 
 function submitRefinementFromInput(extraInstruction) {
   if (!extraInstruction) {
-    refs.commandInput.focus();
     return;
   }
 
-  terminal.writeln(`\r\n${extraInstruction}`);
   requestAiCommand(composeRefinementInstruction(extraInstruction), "refine", extraInstruction);
 }
 
 function submitShellCommand(command) {
-  refs.commandInput.value = "";
-  autoResizeCommandInput();
   state.inputMode = "smart";
-  refs.commandInput.placeholder = TEXT.commandPlaceholder;
+  state.pendingShellEcho = command;
   setAiHint(TEXT.hintShell);
   send("terminal-input", { text: `${command}\r` });
 }
 
 function requestAiCommand(instruction, mode, displayText) {
   state.lastAiInstruction = instruction;
-  refs.commandInput.value = "";
-  autoResizeCommandInput();
   state.inputMode = "smart";
-  refs.commandInput.placeholder = TEXT.commandPlaceholder;
   setAiHint(TEXT.hintLoading);
   send("request-ai-command", {
     instruction,
@@ -578,8 +597,7 @@ function looksLikeNaturalLanguage(text) {
 }
 
 function autoResizeCommandInput() {
-  refs.commandInput.style.height = "auto";
-  refs.commandInput.style.height = `${Math.min(refs.commandInput.scrollHeight, 160)}px`;
+  return;
 }
 
 function printInlineAiDecision(data) {
@@ -589,6 +607,7 @@ function printInlineAiDecision(data) {
   terminal.writeln(`[${TEXT.inlineCommandLabel}] ${data.command}`);
   terminal.writeln(`[hint] ${TEXT.inlineApproveHint}`);
   terminal.writeln("");
+  replayPrompt();
 }
 
 function approveInlineCommand() {
@@ -607,12 +626,10 @@ function modifyInlineCommand() {
 
   state.pendingInlineDecision = false;
   state.inputMode = "refine";
-  refs.commandInput.value = "";
-  refs.commandInput.placeholder = TEXT.refinePlaceholder;
-  autoResizeCommandInput();
-  refs.commandInput.focus();
+  terminal.focus();
   setAiHint(TEXT.hintModify);
   terminal.writeln(`\r\n[status] ${TEXT.inlineModify}`);
+  replayPrompt();
 }
 
 function rejectInlineCommand() {
@@ -623,6 +640,39 @@ function rejectInlineCommand() {
   state.pendingInlineDecision = false;
   setAiHint(TEXT.hintRejected);
   terminal.writeln(`\r\n[status] ${TEXT.inlineRejected}`);
+  replayPrompt();
+}
+
+function filterShellEcho(text) {
+  if (!state.pendingShellEcho) {
+    return text;
+  }
+
+  const command = state.pendingShellEcho;
+  const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escaped}(?:\\r?\\n)?`);
+  const next = String(text || "").replace(pattern, "");
+
+  if (next !== text) {
+    state.pendingShellEcho = "";
+    return next;
+  }
+
+  return text;
+}
+
+function updateLastPrompt(text) {
+  const stripped = String(text || "")
+    .replace(/\u001b\][^\u0007]*\u0007/g, "")
+    .replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "");
+  const matches = stripped.match(/([^\r\n]*[@:][^\r\n]*[$#] ?)$/m);
+  if (matches && matches[1]) {
+    state.lastPrompt = matches[1];
+  }
+}
+
+function replayPrompt() {
+  terminal.write(state.lastPrompt || "$ ");
 }
 
 function restoreSidebarState() {
