@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI SSH Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./node_modules/xterm/css/xterm.css">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <section class="card">
+        <p class="eyebrow">连接 SSH</p>
+        <h1>AI SSH Terminal</h1>
+        <p class="copy">真实 PTY Shell 会话 + AI 命令辅助。所有键盘输入都会直接进入 SSH PTY，包括 Ctrl+C、方向键和密码提示交互。</p>
+
+        <div class="field-group">
+          <label for="sshHost">主机</label>
+          <input id="sshHost" type="text" placeholder="192.168.1.10">
+        </div>
+
+        <div class="field-row">
+          <div class="field-group">
+            <label for="sshPort">端口</label>
+            <input id="sshPort" type="number" value="22">
+          </div>
+          <div class="field-group">
+            <label for="sshUser">用户名</label>
+            <input id="sshUser" type="text" placeholder="root">
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="authMode">登录方式</label>
+          <select id="authMode">
+            <option value="key">私钥（推荐）</option>
+            <option value="password">密码交互</option>
+          </select>
+        </div>
+
+        <div id="keyAuthFields" class="field-group">
+          <label for="privateKeyPath">私钥路径</label>
+          <input id="privateKeyPath" type="text" placeholder="/root/.ssh/id_rsa">
+        </div>
+
+        <p id="authHint" class="helper-copy">推荐：使用私钥登录。</p>
+
+        <div class="button-row">
+          <button id="connectButton" class="primary">连接</button>
+          <button id="disconnectButton" class="secondary">断开</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <p class="eyebrow">AI CONFIG</p>
+        <div class="field-group">
+          <label for="baseUrl">Base URL</label>
+          <input id="baseUrl" type="text" placeholder="https://api.openai.com/v1">
+        </div>
+
+        <div class="field-group">
+          <label for="model">模型名称</label>
+          <input id="model" type="text" placeholder="gpt-4o-mini">
+        </div>
+
+        <div class="field-group">
+          <label for="apiKey">API Key</label>
+          <input id="apiKey" type="password" placeholder="sk-...">
+        </div>
+
+        <div class="field-row">
+          <div class="field-group">
+            <label for="temperature">温度</label>
+            <input id="temperature" type="number" min="0" max="2" step="0.1" value="0.2">
+          </div>
+          <div class="field-group">
+            <label>执行策略</label>
+            <div class="helper-copy">AI 会先生成命令，然后由你确认是否执行。</div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="headers">附加请求头 JSON</label>
+          <textarea id="headers" rows="3">{}</textarea>
+        </div>
+
+        <div class="field-group">
+          <label for="systemPrompt">AI 系统提示词</label>
+          <textarea id="systemPrompt" rows="5">You translate natural language into safe shell commands for a Linux SSH terminal. Return JSON only with command, explanation, and risk.</textarea>
+        </div>
+
+        <div class="field-group">
+          <label for="requestTemplate">高级参数 JSON</label>
+          <textarea id="requestTemplate" rows="3">{"stream":false}</textarea>
+        </div>
+      </section>
+    </aside>
+
+    <main class="terminal-stage">
+      <header class="terminal-toolbar">
+        <div>
+          <p class="eyebrow">终端会话</p>
+          <strong>SSH Shell + AI Assistant</strong>
+        </div>
+        <div class="toolbar-actions">
+          <button id="runAiButton" class="secondary">聚焦 AI 工作流</button>
+          <button id="runSuggestedButton" class="ghost">执行最近命令</button>
+        </div>
+      </header>
+
+      <section class="helper-bar">
+        <div id="connectionStatus" class="helper-pill muted">未连接</div>
+        <div class="helper-pill">Ctrl+Shift+K 可快速聚焦 AI 工作流输入框</div>
+        <div class="helper-pill">SSH 密码提示时，直接在终端窗口输入</div>
+        <div id="aiPreview" class="helper-pill muted">还没有 AI 命令</div>
+      </section>
+
+      <section id="aiWorkflowPanel" class="decision-panel">
+        <div class="decision-header">
+          <strong>AI 工作流</strong>
+          <span id="aiDecisionHint" class="helper-copy">先输入自然语言需求，AI 生成命令后再确认是否执行。</span>
+        </div>
+
+        <div class="decision-refine">
+          <label for="aiInstructionInput">首次提问</label>
+          <textarea id="aiInstructionInput" rows="3" placeholder="例如：检查 /var/log 占用最大的 20 个文件"></textarea>
+          <button id="aiGenerateButton" class="primary" type="button">生成命令</button>
+        </div>
+
+        <div id="aiDecisionCommand" class="decision-command">这里会显示 AI 生成的命令。</div>
+
+        <div class="decision-layout">
+          <div class="decision-options">
+            <button id="decisionExecute" class="decision-option is-active" type="button">执行命令</button>
+            <button id="decisionCancel" class="decision-option" type="button">取消执行</button>
+          </div>
+
+          <div class="decision-refine">
+            <label for="aiRefineInput">补充要求</label>
+            <textarea id="aiRefineInput" rows="3" placeholder="例如：不要删除文件，只显示结果"></textarea>
+            <button id="aiRefineButton" class="secondary" type="button">重新思考</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="terminal"></div>
+    </main>
+  </div>
+
+  <script src="./node_modules/xterm/lib/xterm.js"></script>
+  <script src="./node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+services:
+  web-trum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: web-trum
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      SSH_BINARY: /usr/bin/ssh

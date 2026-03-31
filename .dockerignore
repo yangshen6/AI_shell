@@ -1,0 +1,10 @@
+node_modules
+.playwright-cli
+.server.pid
+server.out
+server.err
+npm-debug.log
+Dockerfile*
+docker-compose*.yml
+.git
+.gitignore
