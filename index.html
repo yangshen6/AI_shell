@@ -14,44 +14,44 @@
   <div class="app-shell">
     <aside class="sidebar">
       <section class="card">
-        <p class="eyebrow">连接 SSH</p>
+        <p class="eyebrow">SSH</p>
         <h1>AI SSH Terminal</h1>
-        <p class="copy">真实 PTY Shell 会话 + AI 命令辅助。所有键盘输入都会直接进入 SSH PTY，包括 Ctrl+C、方向键和密码提示交互。</p>
+        <p class="copy">&#30495;&#23454; PTY Shell &#20250;&#35805; + AI &#21629;&#20196;&#36741;&#21161;&#12290;&#25152;&#26377;&#38190;&#30424;&#36755;&#20837;&#37117;&#20250;&#30452;&#25509;&#36827;&#20837; SSH PTY&#65292;&#21253;&#25324; Ctrl+C&#12289;&#26041;&#21521;&#38190;&#21644;&#23494;&#30721;&#25552;&#31034;&#20132;&#20114;&#12290;</p>
 
         <div class="field-group">
-          <label for="sshHost">主机</label>
+          <label for="sshHost">&#20027;&#26426;</label>
           <input id="sshHost" type="text" placeholder="192.168.1.10">
         </div>
 
         <div class="field-row">
           <div class="field-group">
-            <label for="sshPort">端口</label>
+            <label for="sshPort">&#31471;&#21475;</label>
             <input id="sshPort" type="number" value="22">
           </div>
           <div class="field-group">
-            <label for="sshUser">用户名</label>
+            <label for="sshUser">&#29992;&#25143;&#21517;</label>
             <input id="sshUser" type="text" placeholder="root">
           </div>
         </div>
 
         <div class="field-group">
-          <label for="authMode">登录方式</label>
+          <label for="authMode">&#30331;&#24405;&#26041;&#24335;</label>
           <select id="authMode">
-            <option value="key">私钥（推荐）</option>
-            <option value="password">密码交互</option>
+            <option value="key">&#31169;&#38053;&#65288;&#25512;&#33616;&#65289;</option>
+            <option value="password">&#23494;&#30721;&#20132;&#20114;</option>
           </select>
         </div>
 
         <div id="keyAuthFields" class="field-group">
-          <label for="privateKeyPath">私钥路径</label>
+          <label for="privateKeyPath">&#31169;&#38053;&#36335;&#24484;</label>
           <input id="privateKeyPath" type="text" placeholder="/root/.ssh/id_rsa">
         </div>
 
-        <p id="authHint" class="helper-copy">推荐：使用私钥登录。</p>
+        <p id="authHint" class="helper-copy">&#25512;&#33616;&#65306;&#20351;&#29992;&#31169;&#38053;&#30331;&#24405;&#12290;</p>
 
         <div class="button-row">
-          <button id="connectButton" class="primary">连接</button>
-          <button id="disconnectButton" class="secondary">断开</button>
+          <button id="connectButton" class="primary">&#36830;&#25509;</button>
+          <button id="disconnectButton" class="secondary">&#26029;&#24320;</button>
         </div>
       </section>
 
@@ -63,7 +63,7 @@
         </div>
 
         <div class="field-group">
-          <label for="model">模型名称</label>
+          <label for="model">&#27169;&#22411;&#21517;&#31216;</label>
           <input id="model" type="text" placeholder="gpt-4o-mini">
         </div>
 
@@ -74,27 +74,27 @@
 
         <div class="field-row">
           <div class="field-group">
-            <label for="temperature">温度</label>
+            <label for="temperature">&#28201;&#24230;</label>
             <input id="temperature" type="number" min="0" max="2" step="0.1" value="0.2">
           </div>
           <div class="field-group">
-            <label>执行策略</label>
-            <div class="helper-copy">AI 会先生成命令，然后由你确认是否执行。</div>
+            <label>&#25191;&#34892;&#31574;&#30053;</label>
+            <div class="helper-copy">&#65;&#73;&#20808;&#29983;&#25104;&#21629;&#20196;&#65292;&#20877;&#30001;&#20320;&#22312;&#20250;&#35805;&#27969;&#37324;&#30830;&#35748;&#25191;&#34892;&#12289;&#20462;&#25913;&#25110;&#25298;&#32477;&#12290;</div>
           </div>
         </div>
 
         <div class="field-group">
-          <label for="headers">附加请求头 JSON</label>
+          <label for="headers">&#38468;&#21152;&#35831;&#27714;&#22836; JSON</label>
           <textarea id="headers" rows="3">{}</textarea>
         </div>
 
         <div class="field-group">
-          <label for="systemPrompt">AI 系统提示词</label>
+          <label for="systemPrompt">AI &#31995;&#32479;&#25552;&#31034;&#35789;</label>
           <textarea id="systemPrompt" rows="5">You translate natural language into safe shell commands for a Linux SSH terminal. Return JSON only with command, explanation, and risk.</textarea>
         </div>
 
         <div class="field-group">
-          <label for="requestTemplate">高级参数 JSON</label>
+          <label for="requestTemplate">&#39640;&#32423;&#21442;&#25968; JSON</label>
           <textarea id="requestTemplate" rows="3">{"stream":false}</textarea>
         </div>
       </section>
@@ -103,48 +103,38 @@
     <main class="terminal-stage">
       <header class="terminal-toolbar">
         <div>
-          <p class="eyebrow">终端会话</p>
+          <p class="eyebrow">&#32456;&#31471;&#20250;&#35805;</p>
           <strong>SSH Shell + AI Assistant</strong>
         </div>
         <div class="toolbar-actions">
-          <button id="runAiButton" class="secondary">聚焦 AI 工作流</button>
-          <button id="runSuggestedButton" class="ghost">执行最近命令</button>
+          <button id="runAiButton" class="secondary">&#32858;&#28966; AI &#36755;&#20837;</button>
+          <button id="runSuggestedButton" class="ghost">&#25191;&#34892;&#26368;&#36817;&#21629;&#20196;</button>
         </div>
       </header>
 
       <section class="helper-bar">
-        <div id="connectionStatus" class="helper-pill muted">未连接</div>
-        <div class="helper-pill">Ctrl+Shift+K 可快速聚焦 AI 工作流输入框</div>
-        <div class="helper-pill">SSH 密码提示时，直接在终端窗口输入</div>
-        <div id="aiPreview" class="helper-pill muted">还没有 AI 命令</div>
+        <div id="connectionStatus" class="helper-pill muted">&#26410;&#36830;&#25509;</div>
+        <div class="helper-pill">Ctrl+Shift+K &#21487;&#24555;&#36895;&#32858;&#28966; AI &#36755;&#20837;&#26694;</div>
+        <div class="helper-pill">SSH &#23494;&#30721;&#25552;&#31034;&#26102;&#65292;&#30452;&#25509;&#22312;&#32456;&#31471;&#31383;&#21475;&#36755;&#20837;</div>
+        <div id="aiPreview" class="helper-pill muted">&#36824;&#27809;&#26377; AI &#21629;&#20196;</div>
       </section>
 
       <section id="aiWorkflowPanel" class="decision-panel">
         <div class="decision-header">
-          <strong>AI 工作流</strong>
-          <span id="aiDecisionHint" class="helper-copy">先输入自然语言需求，AI 生成命令后再确认是否执行。</span>
+          <strong>AI &#20250;&#35805;&#27969;</strong>
+          <span id="aiDecisionHint" class="helper-copy">&#25552;&#38382;&#12289;AI &#35299;&#37322;&#12289;&#21629;&#20196;&#23457;&#25209;&#21644;&#34917;&#20805;&#35201;&#27714;&#20250;&#25345;&#32493;&#36861;&#21152;&#21040;&#36825;&#37324;&#12290;</span>
         </div>
 
         <div class="decision-refine">
-          <label for="aiInstructionInput">首次提问</label>
-          <textarea id="aiInstructionInput" rows="3" placeholder="例如：检查 /var/log 占用最大的 20 个文件"></textarea>
-          <button id="aiGenerateButton" class="primary" type="button">生成命令</button>
-        </div>
-
-        <div id="aiDecisionCommand" class="decision-command">这里会显示 AI 生成的命令。</div>
-
-        <div class="decision-layout">
-          <div class="decision-options">
-            <button id="decisionExecute" class="decision-option is-active" type="button">执行命令</button>
-            <button id="decisionCancel" class="decision-option" type="button">取消执行</button>
-          </div>
-
-          <div class="decision-refine">
-            <label for="aiRefineInput">补充要求</label>
-            <textarea id="aiRefineInput" rows="3" placeholder="例如：不要删除文件，只显示结果"></textarea>
-            <button id="aiRefineButton" class="secondary" type="button">重新思考</button>
+          <label for="aiInstructionInput">&#36755;&#20837;&#33258;&#28982;&#35821;&#35328;&#38656;&#27714;</label>
+          <textarea id="aiInstructionInput" rows="3" placeholder="&#20363;&#22914;&#65306;&#26597;&#30475;&#24403;&#21069;&#31995;&#32479;&#20013;&#36816;&#34892;&#30340;&#23481;&#22120;"></textarea>
+          <div class="button-row compact-row">
+            <button id="aiGenerateButton" class="primary" type="button">&#29983;&#25104;&#21629;&#20196;</button>
+            <button id="aiRefineButton" class="secondary" type="button">&#22522;&#20110;&#24403;&#21069;&#36755;&#20837;&#37325;&#26032;&#24605;&#32771;</button>
           </div>
         </div>
+
+        <div id="aiConversation" class="ai-conversation"></div>
       </section>
 
       <div id="terminal"></div>

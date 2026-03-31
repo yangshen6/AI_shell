@@ -1,11 +1,43 @@
 const STORAGE_KEY = "ai-ssh-terminal-config";
 
+const TEXT = {
+  xtermMissing: "\u7ec8\u7aef\u4f9d\u8d56\u672a\u52a0\u8f7d",
+  terminalReady: "AI SSH Terminal ready.",
+  terminalForwarding: "All keys are forwarded to the SSH PTY.",
+  terminalHint: "Use the AI conversation stream to generate and approve shell commands.",
+  hintDefault: "\u63d0\u95ee\u3001AI \u89e3\u91ca\u3001\u547d\u4ee4\u5ba1\u6279\u548c\u8865\u5145\u8981\u6c42\u4f1a\u6301\u7eed\u8ffd\u52a0\u5230\u8fd9\u91cc\u3002",
+  hintLoading: "AI \u6b63\u5728\u601d\u8003\uff0c\u8bf7\u7a0d\u5019\u3002",
+  hintReady: "AI \u5df2\u7ed9\u51fa\u547d\u4ee4\u65b9\u6848\u3002\u4f60\u53ef\u4ee5\u76f4\u63a5\u6267\u884c\u3001\u4fee\u6539\u540e\u91cd\u8bd5\uff0c\u6216\u8005\u62d2\u7edd\u3002",
+  hintModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\u3002\u8f93\u5165\u8865\u5145\u8981\u6c42\u540e\u70b9\u51fb\u201c\u57fa\u4e8e\u5f53\u524d\u8f93\u5165\u91cd\u65b0\u601d\u8003\u201d\u3002",
+  hintRejected: "\u672c\u6b21\u547d\u4ee4\u5df2\u62d2\u7edd\u3002\u4f60\u53ef\u4ee5\u7ee7\u7eed\u8f93\u5165\u65b0\u7684\u81ea\u7136\u8bed\u8a00\u9700\u6c42\u3002",
+  webSocketConnected: "WebSocket connected.",
+  webSocketDisconnected: "WebSocket disconnected.",
+  noAiCommand: "No AI-generated command available.",
+  connectPendingPassword: "\u6b63\u5728\u8fde\u63a5 SSH\uff0c\u7b49\u5f85\u5bc6\u7801\u63d0\u793a...",
+  connectPending: "\u6b63\u5728\u8fde\u63a5 SSH...",
+  sshDisconnected: "SSH disconnected.",
+  authHintKey: "\u63a8\u8350\uff1a\u4f7f\u7528\u79c1\u94a5\u767b\u5f55\u3002",
+  authHintPassword: "\u5bc6\u7801\u4e0d\u4f1a\u901a\u8fc7\u8868\u5355\u4f20\u8f93\uff0c\u8bf7\u5728\u7ec8\u7aef\u91cc\u76f4\u63a5\u8f93\u5165\u5bc6\u7801\u3002",
+  userRequest: "\u81ea\u7136\u8bed\u8a00\u9700\u6c42",
+  userRefine: "\u8865\u5145\u8981\u6c42",
+  systemError: "\u9519\u8bef",
+  systemApproved: "\u5df2\u540c\u610f",
+  systemRejected: "\u5df2\u62d2\u7edd",
+  rejectedText: "\u672c\u6b21 AI \u547d\u4ee4\u672a\u6267\u884c\u3002",
+  aiSuggestion: "AI \u547d\u4ee4\u5efa\u8bae",
+  riskLabel: "\u98ce\u9669\u7b49\u7ea7",
+  execute: "\u6267\u884c",
+  modify: "\u4fee\u6539",
+  reject: "\u62d2\u7edd",
+  generating: "Generating..."
+};
+
 if (typeof Terminal === "undefined" || typeof FitAddon === "undefined") {
   const status = document.querySelector("#connectionStatus");
   const terminalHost = document.querySelector("#terminal");
 
   if (status) {
-    status.textContent = "终端依赖未加载";
+    status.textContent = TEXT.xtermMissing;
     status.classList.remove("muted", "success", "pending");
     status.classList.add("error");
   }
@@ -39,9 +71,9 @@ terminal.loadAddon(fitAddon);
 terminal.open(terminalElement);
 fitAddon.fit();
 terminal.focus();
-terminal.writeln("AI SSH Terminal ready.");
-terminal.writeln("All keys are forwarded to the SSH PTY.");
-terminal.writeln("Use the AI workflow panel to generate or refine shell commands.");
+terminal.writeln(TEXT.terminalReady);
+terminal.writeln(TEXT.terminalForwarding);
+terminal.writeln(TEXT.terminalHint);
 terminal.writeln("");
 
 const refs = {
@@ -68,20 +100,16 @@ const refs = {
   aiWorkflowPanel: document.querySelector("#aiWorkflowPanel"),
   aiInstructionInput: document.querySelector("#aiInstructionInput"),
   aiGenerateButton: document.querySelector("#aiGenerateButton"),
+  aiRefineButton: document.querySelector("#aiRefineButton"),
   aiDecisionHint: document.querySelector("#aiDecisionHint"),
-  aiDecisionCommand: document.querySelector("#aiDecisionCommand"),
-  decisionExecute: document.querySelector("#decisionExecute"),
-  decisionCancel: document.querySelector("#decisionCancel"),
-  aiRefineInput: document.querySelector("#aiRefineInput"),
-  aiRefineButton: document.querySelector("#aiRefineButton")
+  aiConversation: document.querySelector("#aiConversation")
 };
 
 const state = {
   socket: null,
   latestAiCommand: "",
-  pendingAiDecision: false,
   lastAiInstruction: "",
-  selectedDecision: "execute"
+  messageSeq: 0
 };
 
 bindEvents();
@@ -89,8 +117,7 @@ loadConfig();
 connectSocket();
 renderAuthMode();
 observeTerminalResize();
-syncDecisionButtons();
-setAiIdleState();
+setAiHint(TEXT.hintDefault);
 
 function bindEvents() {
   refs.connectButton.addEventListener("click", connectSsh);
@@ -98,15 +125,7 @@ function bindEvents() {
   refs.runAiButton.addEventListener("click", () => refs.aiInstructionInput.focus());
   refs.runSuggestedButton.addEventListener("click", executeLatestAiCommand);
   refs.aiGenerateButton.addEventListener("click", submitInitialInstruction);
-  refs.decisionExecute.addEventListener("click", () => {
-    setDecisionSelection("execute");
-    confirmCurrentDecision();
-  });
-  refs.decisionCancel.addEventListener("click", () => {
-    setDecisionSelection("cancel");
-    confirmCurrentDecision();
-  });
-  refs.aiRefineButton.addEventListener("click", submitRefinement);
+  refs.aiRefineButton.addEventListener("click", submitRefinementFromInput);
   refs.authMode.addEventListener("change", () => {
     renderAuthMode();
     saveConfig();
@@ -136,13 +155,6 @@ function bindEvents() {
     }
   });
 
-  refs.aiRefineInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      submitRefinement();
-    }
-  });
-
   terminal.onData((data) => {
     send("terminal-input", { text: data });
   });
@@ -155,32 +167,6 @@ function bindEvents() {
     if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "k") {
       event.preventDefault();
       refs.aiInstructionInput.focus();
-      return;
-    }
-
-    if (!state.pendingAiDecision) {
-      return;
-    }
-
-    if (document.activeElement === refs.aiInstructionInput || document.activeElement === refs.aiRefineInput) {
-      return;
-    }
-
-    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
-      event.preventDefault();
-      setDecisionSelection("execute");
-      return;
-    }
-
-    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-      event.preventDefault();
-      setDecisionSelection("cancel");
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      confirmCurrentDecision();
     }
   });
 }
@@ -191,7 +177,7 @@ function connectSocket() {
   state.socket = socket;
 
   socket.addEventListener("open", () => {
-    terminal.writeln("[system] WebSocket connected.");
+    terminal.writeln(`[system] ${TEXT.webSocketConnected}`);
     syncTerminalSize();
   });
 
@@ -212,6 +198,7 @@ function connectSocket() {
     if (payload.type === "error") {
       updateConnectionStatus(payload.data.text, "error");
       terminal.writeln(`\r\n[error] ${payload.data.text}`);
+      appendSystemCard(TEXT.systemError, payload.data.text, "error");
       return;
     }
 
@@ -227,35 +214,26 @@ function connectSocket() {
   });
 
   socket.addEventListener("close", () => {
-    updateConnectionStatus("WebSocket disconnected.", "error");
-    terminal.writeln("\r\n[system] WebSocket disconnected.");
+    updateConnectionStatus(TEXT.webSocketDisconnected, "error");
+    terminal.writeln(`\r\n[system] ${TEXT.webSocketDisconnected}`);
   });
 }
 
 function handleAiCommandResponse(data) {
   state.latestAiCommand = data.command;
-  state.pendingAiDecision = true;
-  state.selectedDecision = "execute";
-
   refs.aiPreview.textContent = `AI: ${data.command} | risk: ${data.risk}`;
-  refs.aiDecisionCommand.textContent = data.command;
-  refs.aiDecisionHint.textContent = data.explanation || "请选择是否执行，或补充要求后重新思考。";
-  refs.aiRefineInput.value = "";
-  syncDecisionButtons();
-  setAiDecisionState();
+  setAiHint(TEXT.hintReady);
+  appendAiApprovalCard(data);
 
   terminal.writeln(`\r\n[ai] command: ${data.command}`);
   if (data.explanation) {
     terminal.writeln(`[ai] note: ${data.explanation}`);
   }
-  terminal.writeln("[ai] use the workflow panel to execute, cancel, or refine.");
 }
 
 function connectSsh() {
   updateConnectionStatus(
-    refs.authMode.value === "password"
-      ? "正在连接 SSH，等待密码提示..."
-      : "正在连接 SSH...",
+    refs.authMode.value === "password" ? TEXT.connectPendingPassword : TEXT.connectPending,
     "pending"
   );
   send("connect-ssh", {
@@ -272,7 +250,7 @@ function connectSsh() {
 }
 
 function disconnectSsh() {
-  updateConnectionStatus("SSH disconnected.", "muted");
+  updateConnectionStatus(TEXT.sshDisconnected, "muted");
   send("disconnect-ssh", {});
 }
 
@@ -283,14 +261,24 @@ function submitInitialInstruction() {
     return;
   }
 
-  requestAiCommand(instruction);
+  requestAiCommand(instruction, "user");
 }
 
-function requestAiCommand(instruction) {
+function submitRefinementFromInput() {
+  const extraInstruction = refs.aiInstructionInput.value.trim();
+  if (!extraInstruction) {
+    refs.aiInstructionInput.focus();
+    return;
+  }
+
+  requestAiCommand(composeRefinementInstruction(extraInstruction), "refine", extraInstruction);
+}
+
+function requestAiCommand(instruction, mode, displayText) {
   state.lastAiInstruction = instruction;
-  state.pendingAiDecision = false;
-  refs.aiInstructionInput.value = instruction;
-  setAiLoadingState();
+  appendUserCard(displayText || instruction, mode);
+  refs.aiInstructionInput.value = "";
+  setAiHint(TEXT.hintLoading);
   send("request-ai-command", {
     instruction,
     autoExecute: false,
@@ -300,39 +288,11 @@ function requestAiCommand(instruction) {
 
 function executeLatestAiCommand() {
   if (!state.latestAiCommand) {
-    terminal.writeln("\r\n[error] No AI-generated command available.");
+    terminal.writeln(`\r\n[error] ${TEXT.noAiCommand}`);
     return;
   }
 
-  state.pendingAiDecision = false;
-  setAiIdleState();
   send("execute-ai-command", {});
-}
-
-function confirmCurrentDecision() {
-  if (!state.pendingAiDecision) {
-    return;
-  }
-
-  if (state.selectedDecision === "cancel") {
-    state.pendingAiDecision = false;
-    setAiIdleState("已取消执行。你可以修改需求后重新生成。");
-    terminal.writeln("[ai] canceled.");
-    return;
-  }
-
-  executeLatestAiCommand();
-}
-
-function submitRefinement() {
-  const extraInstruction = refs.aiRefineInput.value.trim();
-  if (!extraInstruction) {
-    refs.aiRefineInput.focus();
-    return;
-  }
-
-  terminal.writeln(`[ai] refine: ${extraInstruction}`);
-  requestAiCommand(composeRefinementInstruction(extraInstruction));
 }
 
 function composeRefinementInstruction(extraInstruction) {
@@ -343,38 +303,115 @@ function composeRefinementInstruction(extraInstruction) {
   return [state.lastAiInstruction, "", `Additional requirement: ${extraInstruction}`].join("\n");
 }
 
-function setDecisionSelection(value) {
-  state.selectedDecision = value;
-  syncDecisionButtons();
+function appendUserCard(text, mode) {
+  const title = mode === "refine" ? TEXT.userRefine : TEXT.userRequest;
+  const card = createConversationCard("user", title);
+  card.querySelector(".conversation-body").textContent = text;
+  refs.aiConversation.appendChild(card);
+  scrollConversationToBottom();
 }
 
-function syncDecisionButtons() {
-  refs.decisionExecute.classList.toggle("is-active", state.selectedDecision === "execute");
-  refs.decisionCancel.classList.toggle("is-active", state.selectedDecision === "cancel");
+function appendSystemCard(title, text, tone) {
+  const card = createConversationCard(`system ${tone || ""}`.trim(), title);
+  card.querySelector(".conversation-body").textContent = text;
+  refs.aiConversation.appendChild(card);
+  scrollConversationToBottom();
 }
 
-function setAiIdleState(hint) {
-  refs.aiWorkflowPanel.classList.remove("is-loading");
-  refs.aiDecisionHint.textContent = hint || "先输入自然语言需求，AI 生成命令后再确认是否执行。";
-  refs.aiDecisionCommand.textContent = state.latestAiCommand || "这里会显示 AI 生成的命令。";
+function appendAiApprovalCard(data) {
+  const card = createConversationCard("assistant", TEXT.aiSuggestion);
+  const body = card.querySelector(".conversation-body");
+  body.innerHTML = "";
+
+  if (data.explanation) {
+    const desc = document.createElement("p");
+    desc.className = "conversation-text";
+    desc.textContent = data.explanation;
+    body.appendChild(desc);
+  }
+
+  const risk = document.createElement("p");
+  risk.className = "conversation-risk";
+  risk.textContent = `${TEXT.riskLabel}: ${data.risk || "unknown"}`;
+  body.appendChild(risk);
+
+  const pre = document.createElement("pre");
+  pre.className = "conversation-command";
+  pre.textContent = data.command;
+  body.appendChild(pre);
+
+  const actions = document.createElement("div");
+  actions.className = "conversation-actions";
+
+  const executeButton = document.createElement("button");
+  executeButton.type = "button";
+  executeButton.className = "primary";
+  executeButton.textContent = TEXT.execute;
+  executeButton.addEventListener("click", () => {
+    state.latestAiCommand = data.command;
+    executeLatestAiCommand();
+    appendSystemCard(TEXT.systemApproved, data.command, "success");
+  });
+
+  const modifyButton = document.createElement("button");
+  modifyButton.type = "button";
+  modifyButton.className = "secondary";
+  modifyButton.textContent = TEXT.modify;
+  modifyButton.addEventListener("click", () => {
+    refs.aiInstructionInput.value = "";
+    refs.aiInstructionInput.placeholder =
+      "\u7ee7\u7eed\u8865\u5145\u8981\u6c42\uff0c\u4f8b\u5982\uff1a\u53ea\u67e5\u770b\uff0c\u4e0d\u5220\u9664";
+    refs.aiInstructionInput.focus();
+    setAiHint(TEXT.hintModify);
+  });
+
+  const rejectButton = document.createElement("button");
+  rejectButton.type = "button";
+  rejectButton.className = "ghost";
+  rejectButton.textContent = TEXT.reject;
+  rejectButton.addEventListener("click", () => {
+    appendSystemCard(TEXT.systemRejected, TEXT.rejectedText, "muted");
+    setAiHint(TEXT.hintRejected);
+  });
+
+  actions.appendChild(executeButton);
+  actions.appendChild(modifyButton);
+  actions.appendChild(rejectButton);
+  body.appendChild(actions);
+
+  refs.aiConversation.appendChild(card);
+  scrollConversationToBottom();
 }
 
-function setAiLoadingState() {
-  refs.aiWorkflowPanel.classList.add("is-loading");
-  refs.aiDecisionHint.textContent = "AI 正在思考，请稍候。";
-  refs.aiDecisionCommand.textContent = "Generating...";
+function createConversationCard(type, title) {
+  const card = document.createElement("article");
+  card.className = `conversation-card ${type}`;
+  card.dataset.seq = String(++state.messageSeq);
+
+  const heading = document.createElement("div");
+  heading.className = "conversation-title";
+  heading.textContent = title;
+
+  const body = document.createElement("div");
+  body.className = "conversation-body";
+
+  card.appendChild(heading);
+  card.appendChild(body);
+  return card;
 }
 
-function setAiDecisionState() {
-  refs.aiWorkflowPanel.classList.remove("is-loading");
+function setAiHint(text) {
+  refs.aiDecisionHint.textContent = text;
+}
+
+function scrollConversationToBottom() {
+  refs.aiConversation.scrollTop = refs.aiConversation.scrollHeight;
 }
 
 function renderAuthMode() {
   const useKey = refs.authMode.value === "key";
   refs.keyAuthFields.classList.toggle("hidden", !useKey);
-  refs.authHint.innerHTML = useKey
-    ? "&#25512;&#33616;&#65306;&#20351;&#29992;&#31169;&#38053;&#30331;&#24405;&#12290;"
-    : "&#23494;&#30721;&#19981;&#20877;&#36890;&#36807;&#34920;&#21333;&#20256;&#36755;&#65292;&#35831;&#22312;&#32456;&#31471;&#37324;&#30452;&#25509;&#36755;&#20837;&#23494;&#30721;&#12290;";
+  refs.authHint.textContent = useKey ? TEXT.authHintKey : TEXT.authHintPassword;
 }
 
 function updateConnectionStatus(text, tone) {
@@ -401,7 +438,7 @@ function syncTerminalSize() {
 function send(type, data) {
   if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
     if (type !== "terminal-resize") {
-      terminal.writeln("\r\n[error] WebSocket is not connected.");
+      terminal.writeln(`\r\n[error] ${TEXT.webSocketDisconnected}`);
     }
     return;
   }

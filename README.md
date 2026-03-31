@@ -1,283 +1,152 @@
 # AI SSH Terminal
 
-一个基于 `Node.js + WebSocket + node-pty + xterm.js` 的网页 SSH 终端。
+Web-based SSH terminal with real PTY bridging and AI-assisted command planning.
 
-它提供两类能力：
+## Features
 
-- 通过网页连接远程 Linux SSH，会话是真实 PTY，不是聊天模拟
-- 通过 AI 把自然语言转换成 shell 命令，并在执行前由用户确认
+- Real SSH PTY session backed by `node-pty`
+- Password-interactive and private-key login flows
+- Terminal key forwarding, including arrow keys and `Ctrl+C`
+- AI converts natural language into shell commands
+- Inline approval workflow: execute, modify, or reject per suggestion
+- Persistent AI conversation stream with per-card status and execution summary
+- Docker-based deployment
+- Local xterm assets served from `node_modules`
 
-## 功能特性
+## Stack
 
-- 真实 SSH PTY 会话
-- 支持密码交互和私钥登录
-- 支持方向键、`Ctrl+C`、终端 resize
-- AI 自然语言生成命令
-- AI 命令先生成，再由用户确认是否执行
-- 支持补充要求后让 AI 重新思考
-- 支持 Docker 部署
-- 前端终端资源本地提供，不依赖外部 CDN
+- Backend: `server.js`
+- Frontend: `index.html`, `app.js`, `styles.css`
+- Deployment: `Dockerfile`, `docker-compose.yml`
 
-## 技术结构
-
-- 后端: `server.js`
-  负责静态文件、WebSocket、SSH PTY 管理、AI 请求转发
-- 前端: `index.html` + `app.js` + `styles.css`
-  负责终端显示、SSH 配置、AI 工作流面板
-- 容器部署: `Dockerfile` + `docker-compose.yml`
-
-## 目录说明
-
-- [server.js](web_trum\server.js)
-- [app.js](web_trum\app.js)
-- [index.html](web_trum\index.html)
-- [styles.css](web_trum\styles.css)
-- [Dockerfile](web_trum\Dockerfile)
-- [docker-compose.yml](web_trum\docker-compose.yml)
-
-## 环境要求
-
-- Docker
-- Docker Compose
-
-如果不用 Docker，本地运行需要：
-
-- Node.js 24+
-- 可用的 `ssh` 客户端
-
-## Docker 部署
-
-### 1. 构建并启动
+## Run With Docker
 
 ```bash
 docker compose up -d --build
 ```
 
-默认端口是 `3000`。
+Default port:
 
-如果你想修改暴露端口：
+```text
+3000
+```
+
+Custom port example:
 
 ```bash
 PORT=8080 docker compose up -d --build
 ```
 
-### 2. 查看日志
-
-```bash
-docker logs -f web-trum
-```
-
-如果启动成功，会看到类似输出：
+Open:
 
 ```text
-Server running at http://localhost:3000
+http://YOUR_SERVER_IP:3000
 ```
 
-### 3. 访问页面
+## SSH Usage
 
-浏览器打开：
+Fill in:
 
-```text
-http://你的服务器IP:3000
-```
+- Host
+- Port
+- Username
+- Auth mode
 
-如果改了端口，就替换成对应端口。
+For password mode, type the password directly inside the terminal when the remote host prompts for it.
 
-## Docker Compose 配置
-
-当前 [docker-compose.yml](web_trum\docker-compose.yml) 默认配置如下：
-
-```yml
-services:
-  web-trum:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: web-trum
-    restart: unless-stopped
-    ports:
-      - "${PORT:-3000}:3000"
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      SSH_BINARY: /usr/bin/ssh
-```
-
-## SSH 使用方式
-
-页面左侧填写：
-
-- 主机
-- 端口
-- 用户名
-- 登录方式
-
-### 私钥登录
-
-选择“私钥”，并填写容器内部可访问的私钥路径。
-
-示例：
+For key mode, provide a key path that exists inside the container, for example:
 
 ```text
 /root/.ssh/id_rsa
 ```
 
-如果你要在 Docker 中使用私钥，建议把宿主机 `.ssh` 目录挂载进容器。
+If you want to use host keys from the Docker host, mount them read-only:
 
-例如：
-
-```yml
+```yaml
 volumes:
   - /root/.ssh:/root/.ssh:ro
 ```
 
-### 密码登录
+## AI Configuration
 
-选择“密码交互”后，密码不会通过表单传输。
+The UI expects a `Base URL`, not the full chat completions endpoint.
 
-正确流程是：
-
-1. 点击“连接”
-2. 等终端出现密码提示
-3. 直接在终端区域输入密码并回车
-
-## AI 配置说明
-
-页面中的 AI 配置字段含义如下：
-
-- `Base URL`
-- `模型名称`
-- `API Key`
-- `温度`
-- `附加请求头 JSON`
-- `AI 系统提示词`
-- `高级参数 JSON`
-
-### 重要说明
-
-页面里填的是 `Base URL`，不是完整 `chat/completions` 地址。
-
-后端会自动补全：
+The backend automatically appends:
 
 ```text
 /chat/completions
 ```
 
-例如你填写：
+Example:
 
 ```text
-https://api.openai.com/v1
+Base URL: https://ark.cn-beijing.volces.com/api/coding/v3
+Model: ark-code-latest
 ```
 
-后端实际请求：
+## AI Workflow
 
-```text
-https://api.openai.com/v1/chat/completions
-```
+1. Enter a natural-language request.
+2. Generate a command.
+3. Review the AI explanation and proposed shell command.
+4. Choose `Execute`, `Modify`, or `Reject`.
+5. Follow-up instructions continue in the same conversation stream.
 
-### 火山方舟示例
+Each AI suggestion card keeps:
 
-如果你使用火山方舟 Coding API：
+- Approval status
+- Proposed command
+- Explanation
+- Execution summary linked to that card
 
-```text
-Base URL:
-https://ark.cn-beijing.volces.com/api/coding/v3
-
-Model:
-ark-code-latest
-```
-
-## AI 工作流
-
-当前 AI 交互已经收敛为页面内完整工作流：
-
-1. 在“首次提问”输入自然语言需求
-2. 点击“生成命令”
-3. AI 返回命令和说明
-4. 选择：
-   - 执行命令
-   - 取消执行
-   - 在“补充要求”中输入更多限制条件，再点“重新思考”
-
-示例：
-
-```text
-首次提问:
-查看 /var/log 中最大的 20 个文件
-
-补充要求:
-不要删除任何文件，只显示大小和路径
-```
-
-## 本地开发
-
-如果你在本地直接运行：
+## Local Development
 
 ```bash
 npm install
 npm start
 ```
 
-访问：
+Then open:
 
 ```text
 http://127.0.0.1:3000
 ```
 
-## 常见问题
+## Troubleshooting
 
-### 1. 页面能打开，但终端没有反应
+### Page loads but terminal does not respond
 
-优先检查：
+Check:
 
-- 浏览器控制台是否报错
-- 容器日志是否正常
-- WebSocket 是否连接成功
+- Browser console errors
+- Container logs
+- WebSocket connection state
 
-### 2. SSH 连接没有提示
+### SSH connection shows no prompt
 
-先确认：
+Check:
 
-- 容器内 `ssh` 是否可用
-- 目标主机 `22` 端口是否可达
-- 密码登录时是否在终端区域输入了密码
+- `ssh` is installed in the container
+- The target host is reachable on port `22`
+- Password input is being entered into the terminal area, not a form field
 
-### 3. AI 返回 404
+### AI returns 404
 
-通常是 `Base URL` 配置不对。
+Usually the `Base URL` is wrong. The app expects the base path and appends `/chat/completions` automatically.
 
-请确认填写的是基础地址，而不是错误路径。
+### xterm assets fail to load
 
-本项目会自动补 `/chat/completions`。
+Rebuild the container and verify `node_modules/xterm` and `node_modules/xterm-addon-fit` exist in the image.
 
-### 4. 终端库加载失败
-
-当前版本已经从本地 `node_modules` 提供 `xterm` 和 `xterm-addon-fit`，不依赖 CDN。
-
-如果仍然失败，优先检查：
-
-- 镜像是否重新构建
-- 容器中 `node_modules` 是否存在
-- 浏览器是否访问的是新容器
-
-## 重新部署
-
-代码更新后，建议执行：
+## Redeploy
 
 ```bash
 docker compose down
 docker compose up -d --build
 ```
 
-## 当前限制
+## Current Limits
 
-- SSH 连接成功识别依赖终端输出特征，不是 SSH 协议级确认
-- AI 命令安全策略目前依赖提示词和用户确认，不是命令沙箱
-- 私钥路径默认按容器内部路径理解
-
-## 后续建议
-
-- 增加命令审计日志
-- 增加 SSH 主机白名单
-- 增加 AI 风险等级可视化
-- 增加命令历史和执行记录
+- SSH success detection still relies partly on terminal output heuristics
+- AI command safety is approval-based, not sandboxed execution
+- Private key paths are interpreted relative to the container filesystem
