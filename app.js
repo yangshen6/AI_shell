@@ -14,7 +14,7 @@ const TEXT = {
   hintShell: "\u5df2\u6309\u666e\u901a shell \u547d\u4ee4\u53d1\u9001\u5230 SSH \u4f1a\u8bdd\u3002",
   inlineAiHeader: "\u667a\u80fd\u52a9\u624b",
   inlineCommandLabel: "\u5efa\u8bae\u547d\u4ee4",
-  inlineApproveHint: "\u6309 Ctrl+Y \u6267\u884c\uff0cCtrl+E \u4fee\u6539\uff0cCtrl+X \u62d2\u7edd\u3002",
+  inlineApproveHint: "\u76f4\u63a5\u56de\u8f66\u6267\u884c\uff0c\u6216\u8f93\u5165 y/m/n \u540e\u56de\u8f66\u3002",
   inlineRejected: "\u5df2\u62d2\u7edd\u672c\u6b21 AI \u547d\u4ee4\u3002",
   inlineModify: "\u5df2\u8fdb\u5165\u4fee\u6539\u6a21\u5f0f\uff0c\u8bf7\u76f4\u63a5\u5728\u7ec8\u7aef prompt \u8f93\u5165\u8865\u5145\u8981\u6c42\u3002",
   inlineExecuting: "\u6b63\u5728\u6267\u884c AI \u547d\u4ee4...",
@@ -348,7 +348,11 @@ function handleTerminalData(data) {
   }
 
   if (!state.lineMode) {
-    state.lineMode = shouldUseLocalAIMode(data) || state.inputMode === "refine" ? "local" : "remote";
+    if (state.pendingInlineDecision) {
+      state.lineMode = "local";
+    } else {
+      state.lineMode = shouldUseLocalAIMode(data) || state.inputMode === "refine" ? "local" : "remote";
+    }
     if (state.lineMode === "remote") {
       send("terminal-input", { text: data });
       return;
@@ -375,6 +379,22 @@ function commitTerminalLine() {
   terminal.write("\r\n");
   state.localInputBuffer = "";
   state.lineMode = null;
+
+  if (state.pendingInlineDecision) {
+    const choice = text.toLowerCase();
+    if (!choice || choice === "y" || choice === "yes") {
+      approveInlineCommand();
+      return;
+    }
+    if (choice === "m" || choice === "modify") {
+      modifyInlineCommand();
+      return;
+    }
+    if (choice === "n" || choice === "no" || choice === "reject") {
+      rejectInlineCommand();
+      return;
+    }
+  }
 
   if (!text) {
     replayPrompt();
